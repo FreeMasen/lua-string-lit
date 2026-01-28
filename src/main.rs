@@ -3,9 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use analisar::aware::ast::{
-    Block, ExpListItem, Expression, Field, Statement, SuffixedProperty, Table,
-};
+use analisar::aware::ast::{Block, ExpListItem, Expression, Field, Statement, SuffixedProperty};
 use bstr::BString;
 use clap::Parser;
 use serde::{Serialize, Serializer};
@@ -60,10 +58,14 @@ fn main() {
 
 fn collect_file(path: &Path) -> Vec<StringLiteral> {
     let contents = std::fs::read(path).unwrap();
-    let mut parser = analisar::aware::Parser::new(&contents);
+    collect_bytes(&contents)
+}
+
+fn collect_bytes(contents: &[u8]) -> Vec<StringLiteral> {
+    let mut parser = analisar::aware::Parser::new(contents);
     let mut ret = Vec::new();
     while let Some(stmt) = parser.next() {
-        let stmt = stmt.unwrap();
+        let stmt = dbg!(stmt).unwrap();
         ret.extend(collect_statement(&stmt.statement));
     }
     ret
@@ -72,7 +74,13 @@ fn collect_file(path: &Path) -> Vec<StringLiteral> {
 fn collect_statement(stmt: &Statement) -> Vec<StringLiteral> {
     match stmt {
         Statement::Expression(expr) => collect_expression(expr),
-        Statement::Assignment { values, .. } => collect_expr_list(values),
+        Statement::Assignment {
+            targets, values, ..
+        } => {
+            let mut ret = collect_expr_list(targets);
+            ret.extend(collect_expr_list(values));
+            ret
+        }
         Statement::Do { block, .. } => collect_block(block),
         Statement::While { exp, block, .. } => {
             let mut ret = collect_expression(exp);
@@ -108,7 +116,10 @@ fn collect_statement(stmt: &Statement) -> Vec<StringLiteral> {
         Statement::ForIn(for_stmt) => collect_block(&for_stmt.block),
         Statement::Function { body, .. } => collect_block(&body.block),
         Statement::Return(ret_stmt) => collect_expr_list(&ret_stmt.exprs),
-        _ => Vec::new(),
+        Statement::Empty(_)
+        | Statement::Label { .. }
+        | Statement::Break(_)
+        | Statement::GoTo { .. } => Vec::new(),
     }
 }
 
@@ -137,7 +148,7 @@ fn collect_expression(expr: &Expression) -> Vec<StringLiteral> {
             end_offset: lit.span.end,
             value: BString::new(lit.value.to_vec()),
         }],
-        Expression::FunctionDef(body) => {
+        Expression::FunctionDef { keyword: _, body } => {
             let mut ret = Vec::new();
             for stmt in &body.block.0 {
                 ret.extend(collect_statement(stmt));
@@ -157,7 +168,7 @@ fn collect_expression(expr: &Expression) -> Vec<StringLiteral> {
                 analisar::aware::ast::Args::ExpList { exprs, .. } => {
                     ret.extend(collect_expr_list(exprs));
                 }
-                analisar::aware::ast::Args::Table(t) => ret.extend(collect_table(t)),
+                analisar::aware::ast::Args::Table(t) => ret.extend(collect_table(&t.field_list)),
                 analisar::aware::ast::Args::String(lit) => ret.push(StringLiteral {
                     start_offset: lit.span.start,
                     end_offset: lit.span.end,
@@ -173,20 +184,80 @@ fn collect_expression(expr: &Expression) -> Vec<StringLiteral> {
             }
             ret
         }
-        _ => Vec::new(),
+        Expression::TableCtor(table) => collect_table(&table.field_list),
+        Expression::Nil(_)
+        | Expression::False(_)
+        | Expression::True(_)
+        | Expression::Numeral(_)
+        | Expression::Name(_)
+        | Expression::VarArgs(_) => Vec::new(),
     }
 }
 
-fn collect_table(t: &Table) -> Vec<StringLiteral> {
+fn collect_table(field_list: &[Field]) -> Vec<StringLiteral> {
     let mut ret = Vec::new();
-    for field in &t.field_list {
+    for field in field_list {
         match field {
             Field::Record { name, value, .. } => {
-                ret.extend(collect_expression(name));
+                ret.extend(collect_expression(&name.expr));
                 ret.extend(collect_expression(value));
             }
             Field::List { value, .. } => ret.extend(collect_expression(value)),
         }
     }
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hello_world() {
+        let mut strs = collect_bytes(b"print'hello world'");
+        let hw = strs.pop().unwrap();
+        assert!(strs.is_empty(), "{strs:?} was not empty");
+        assert_eq!(hw.start_offset, 5);
+        assert_eq!(&hw.value.to_string(), "'hello world'");
+        assert_eq!(hw.end_offset, 18);
+    }
+
+    #[test]
+    fn random_smattering() {
+        const ASSIGN: &str = "'value'";
+        const ARGUMENT: &str = "'arg'";
+        const TABLE_KEY: &str = r#""key""#;
+        const TABLE_VALUE: &str = r#""field""#;
+        const TABLE_ARG_KEY: &str = r#""arg_key""#;
+        const TABLE_ARG_VALUE: &str = r#""arg_field""#;
+        const FIELD_ASSIGN_KEY: &str = "'assign-key'";
+        const FIELD_ASSIGN_VALUE: &str = "'assign-value'";
+        env_logger::builder().is_test(true).try_init().ok();
+        let lua = format!(
+            "\
+local v = {ASSIGN}\n\
+print({ARGUMENT})\n\
+local t = {{ [{TABLE_KEY}] = {TABLE_VALUE} }} \n\
+print{{ [{TABLE_ARG_KEY}] = {TABLE_ARG_VALUE} }} \n\
+t[{FIELD_ASSIGN_KEY}] = {FIELD_ASSIGN_VALUE} \n\
+        "
+        );
+        println!("lua: {lua}");
+        let mut strs = collect_bytes(lua.as_bytes());
+        println!("{strs:?}");
+        let expected = &[
+            ASSIGN,
+            ARGUMENT,
+            TABLE_KEY,
+            TABLE_VALUE,
+            TABLE_ARG_KEY,
+            TABLE_ARG_VALUE,
+            FIELD_ASSIGN_KEY,
+            FIELD_ASSIGN_VALUE,
+        ];
+        for (parsed, expected) in strs.drain(..).zip(expected.iter()) {
+            assert_eq!(parsed.value.to_string(), *expected);
+        }
+        assert!(strs.is_empty(), "{strs:?} was not empty")
+    }
 }
