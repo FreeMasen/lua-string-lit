@@ -1,36 +1,70 @@
 use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
+    collections::HashMap, path::PathBuf, str::FromStr
 };
 
-use analisar::aware::ast::{Block, ExpListItem, Expression, Field, Statement, SuffixedProperty};
+use analisar::aware::ast::{
+    Block, ExpListItem, Expression, Field, LiteralString, Statement, SuffixedProperty,
+};
 use bstr::BString;
 use clap::Parser;
-use serde::{Serialize, Serializer};
+use serde::Serialize;
+
+use crate::line_index::LineIndex;
+
+mod line_index;
 
 #[derive(Debug, Parser)]
 struct Args {
     project_root: PathBuf,
+    #[arg(long = "format", short = 'f', default_value_t = OutputFormat::Json)]
+    format: OutputFormat,
 }
+
+#[derive(Debug, Clone, Copy)]
+enum OutputFormat {
+    Json,
+    Text,
+}
+
+impl FromStr for OutputFormat {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.trim() {
+            "json" => OutputFormat::Json,
+            "text" => OutputFormat::Text,
+            fmt => return Err(format!("unknown format `{fmt}`")),
+        })
+    }
+}
+
+impl std::fmt::Display for OutputFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Json => "json",
+            Self::Text => "text",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[allow(unused)]
 struct StringLiteral {
-    #[serde(serialize_with = "StringLiteral::ser_value")]
     value: BString,
     start_offset: usize,
     end_offset: usize,
 }
 
-impl StringLiteral {
-    fn ser_value<S>(value: &BString, s: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        s.serialize_str(&format!("{}", value))
+impl<'a> From<&LiteralString<'a>> for StringLiteral {
+    fn from(lit: &LiteralString<'a>) -> Self {
+        let start_offset = lit.span.start + 1;
+        let end_offset = lit.span.end - 1;
+        StringLiteral {
+            start_offset,
+            end_offset,
+            value: BString::new(lit.value[1..lit.value.len() - 1].to_vec()),
+        }
     }
 }
-
-type ProjectMap = HashMap<PathBuf, Vec<StringLiteral>>;
 
 fn main() {
     let args = Args::parse();
@@ -38,34 +72,50 @@ fn main() {
         eprintln!("Inaccessible project root: {}", args.project_root.display());
         std::process::exit(1);
     }
-    let mut all = ProjectMap::new();
-    for entry in walkdir::WalkDir::new(args.project_root)
-        .contents_first(true)
-        .into_iter()
-        .filter_map(|p| {
-            let p = p.ok()?;
-            if p.file_type().is_file() && p.path().extension()? == "lua" {
-                return Some(p);
-            }
-            None
-        })
-    {
-        let strs = collect_file(entry.path());
-        all.insert(entry.path().to_path_buf(), strs);
+    let mut all: HashMap<String, Vec<String>> = HashMap::new();
+    for entry in walkdir::WalkDir::new(args.project_root).contents_first(true) {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.path().extension().is_none_or(|ext| ext != "lua") {
+            continue;
+        }
+        let path = entry.path();
+        let contents = std::fs::read(path).unwrap();
+        let strs = collect_bytes(&contents);
+        let index = LineIndex::new(&contents);
+        for s in strs {
+            let (line, col) = index.get(s.start_offset);
+            all.entry(s.value.to_string())
+                .and_modify(|v| v.push(format!("{}:{line}:{col}", entry.path().display())))
+                .or_insert_with(|| {
+                    vec![format!("{}:{line}:{col}", entry.path().display())]
+                });
+        }
     }
-    println!("{}", serde_json::to_string_pretty(&all).unwrap());
+    match args.format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(&all).unwrap());
+        }
+        OutputFormat::Text => {
+            for (s, paths) in all.iter() {
+                println!("{s}:");
+                for path in paths {
+                    println!("\t{path}");
+                }
+            }
+        }
+    }
 }
 
-fn collect_file(path: &Path) -> Vec<StringLiteral> {
-    let contents = std::fs::read(path).unwrap();
-    collect_bytes(&contents)
-}
-
-fn collect_bytes(contents: &[u8]) -> Vec<StringLiteral> {
+fn collect_bytes<'a>(contents: &'a [u8]) -> Vec<StringLiteral> {
     let mut parser = analisar::aware::Parser::new(contents);
     let mut ret = Vec::new();
     while let Some(stmt) = parser.next() {
-        let stmt = dbg!(stmt).unwrap();
+        let stmt = stmt.unwrap();
         ret.extend(collect_statement(&stmt.statement));
     }
     ret
@@ -143,11 +193,7 @@ fn collect_expr_list(expr_list: &[ExpListItem]) -> Vec<StringLiteral> {
 
 fn collect_expression(expr: &Expression) -> Vec<StringLiteral> {
     match expr {
-        Expression::LiteralString(lit) => vec![StringLiteral {
-            start_offset: lit.span.start,
-            end_offset: lit.span.end,
-            value: BString::new(lit.value.to_vec()),
-        }],
+        Expression::LiteralString(lit) => vec![lit.into()],
         Expression::FunctionDef { keyword: _, body } => {
             let mut ret = Vec::new();
             for stmt in &body.block.0 {
@@ -169,11 +215,7 @@ fn collect_expression(expr: &Expression) -> Vec<StringLiteral> {
                     ret.extend(collect_expr_list(exprs));
                 }
                 analisar::aware::ast::Args::Table(t) => ret.extend(collect_table(&t.field_list)),
-                analisar::aware::ast::Args::String(lit) => ret.push(StringLiteral {
-                    start_offset: lit.span.start,
-                    end_offset: lit.span.end,
-                    value: BString::new(lit.value.to_vec()),
-                }),
+                analisar::aware::ast::Args::String(lit) => ret.push(lit.into()),
             }
             ret
         }
@@ -217,21 +259,21 @@ mod tests {
         let mut strs = collect_bytes(b"print'hello world'");
         let hw = strs.pop().unwrap();
         assert!(strs.is_empty(), "{strs:?} was not empty");
-        assert_eq!(hw.start_offset, 5);
-        assert_eq!(&hw.value.to_string(), "'hello world'");
-        assert_eq!(hw.end_offset, 18);
+        assert_eq!(hw.start_offset, 6);
+        assert_eq!(&hw.value.to_string(), "hello world");
+        assert_eq!(hw.end_offset, 17);
     }
 
     #[test]
     fn random_smattering() {
-        const ASSIGN: &str = "'value'";
-        const ARGUMENT: &str = "'arg'";
-        const TABLE_KEY: &str = r#""key""#;
-        const TABLE_VALUE: &str = r#""field""#;
-        const TABLE_ARG_KEY: &str = r#""arg_key""#;
-        const TABLE_ARG_VALUE: &str = r#""arg_field""#;
-        const FIELD_ASSIGN_KEY: &str = "'assign-key'";
-        const FIELD_ASSIGN_VALUE: &str = "'assign-value'";
+        const ASSIGN: &str = "value";
+        const ARGUMENT: &str = "arg";
+        const TABLE_KEY: &str = "key";
+        const TABLE_VALUE: &str = "field";
+        const TABLE_ARG_KEY: &str = "arg_key";
+        const TABLE_ARG_VALUE: &str = "arg_field";
+        const FIELD_ASSIGN_KEY: &str = "assign-key";
+        const FIELD_ASSIGN_VALUE: &str = "assign-value";
         env_logger::builder().is_test(true).try_init().ok();
         let lua = format!(
             "\
