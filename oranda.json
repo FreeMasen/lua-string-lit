@@ -1,0 +1,8 @@
+{
+    "build": {
+        "path_prefix": "lua-string-lit"
+    },
+    "styles": {
+        "theme": "hacker"
+    }
+}
