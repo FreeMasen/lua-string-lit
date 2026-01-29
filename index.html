@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" id="oranda" class="hacker">
+  <head>
+    <title>lua-string-lit</title>
+    
+      <meta property="og:url" content="https://gh.freemasen.com/lua-string-lit" />
+    
+    
+      <link rel="icon" href="/lua-string-lit/favicon.ico" />
+    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+      <meta name="description" content="A tool that will scan a directory for any `.lua` files and collect all string literals they contain." />
+      <meta property="og:description" content="A tool that will scan a directory for any `.lua` files and collect all string literals they contain." />
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="lua-string-lit" />
+    
+    
+    
+    <meta http-equiv="Permissions-Policy" content="interest-cohort=()" />
+    <link rel="stylesheet" href="/lua-string-lit/oranda-v0.6.1.css" />
+    
+    
+  </head>
+  <body>
+    <div class="container">
+      <div class="page-body">
+        
+          <div class="repo_banner">
+            <a href="https://github.com/FreeMasen/lua-string-lit">
+              <div class="github-icon" aria-hidden="true"></div>
+              Check out our GitHub!
+            </a>
+          </div>
+        
+
+        <main>
+          <header>
+            
+            <h1 class="title">lua-string-lit</h1>
+            
+  <nav class="nav">
+    <ul>
+      <li><a href="/lua-string-lit/">Home</a></li>
+
+      
+
+      
+
+      
+
+      
+
+      
+        <li><a href="/lua-string-lit/changelog/">Changelog</a></li>
+      
+    </ul>
+  </nav>
+
+          </header>
+
+          
+
+
+    <h1>Lua String Lit</h1>
+<p>A tool that will scan a directory for any <code>.lua</code> files and collect all string literals they contain.
+The output is a map keyed with the file name where the value is a list of objects containing the
+literal value and the raw byte offset from the file.</p>
+<h2>Example Output</h2>
+<p>The following is the json output from the
+<a href="./example/init.lua" rel="noopener noreferrer">example</a> library</p>
+<pre style="background-color:#263238;"><span style="color:#89ddff;">{
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"127.0.0.1"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:10:32</span><span style="color:#89ddff;">",
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:12:37</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"*"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:20:26</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"socket"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:1:25</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"239.255.255.250"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:4:13</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"ip-multicast-loop"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:26:24</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"0.0.0.0"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:10:13</span><span style="color:#89ddff;">",
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:12:17</span><span style="color:#89ddff;">",
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:24:16</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"hi!"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:33:18</span><span style="color:#89ddff;">",
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:41:20</span><span style="color:#89ddff;">",
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:55:18</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"Closed!!!"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:45:14</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"reuseaddr"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:21:24</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"closed"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:44:16</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"!"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:50:24</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"</span><span style="color:#89ddff;">\\</span><span style="color:#c792ea;">n"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:53:22</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"ip-add-membership"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:22:24</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"timeout"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:38:16</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"waiting for message"</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:31:22</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">],
+</span><span style="color:#eeffff;">  </span><span style="color:#c792ea;">"."</span><span style="color:#89ddff;">: [
+</span><span style="color:#eeffff;">    </span><span style="color:#89ddff;">"</span><span style="color:#c3e88d;">./example/init.lua:39:24</span><span style="color:#89ddff;">"
+</span><span style="color:#eeffff;">  </span><span style="color:#89ddff;">]
+</span><span style="color:#89ddff;">}
+</span></pre>
+
+
+
+
+        </main>
+      </div>
+
+      <footer>
+        
+          <a href="https://github.com/FreeMasen/lua-string-lit"><div class="github-icon" aria-hidden="true"></div></a>
+        
+        <span>
+          lua-string-lit
+        </span>
+      </footer>
+    </div>
+
+    
+    
+
+    
+
+
+  </body>
+</html>
