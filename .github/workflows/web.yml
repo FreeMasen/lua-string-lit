@@ -70,6 +70,10 @@ jobs:
           curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/oranda/releases/download/v0.6.1/oranda-installer.sh | sh
           oranda build
       
+      - name: Copy lua file into site
+        run: |
+          cp ./example/init.lua ./public/
+      
       # Deploy to our gh-pages branch (creating it if it doesn't exist).
       # The "public" dir that oranda made above will become the root dir
       # of this branch.
